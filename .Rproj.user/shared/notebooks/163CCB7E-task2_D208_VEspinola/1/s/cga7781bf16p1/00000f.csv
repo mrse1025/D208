@@ -1,0 +1,4 @@
+"0","#Final data set, cleaned and ready for logistic model. The variable were chosen based on their importance, namely, variables with greater than one significance were selected. "
+"0","reduction <- reduced_scaled %>%"
+"0","                select(churn, bandwidth_gb_year, tenure, monthly_charge, techie, item3:item5)"
+"0",""

@@ -1,0 +1,189 @@
+---
+title: "Odds of Churn"
+author: "Victoria Espinola"
+date: "2022-09-28"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE, warning= FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Packages used for analysis and source code for data prep. 
+
+library(tidyverse)
+library(broom)
+library(PerformanceAnalytics)
+library(caret)
+library(pROC)
+library(tidymodels)
+library(ggplot2)
+library(plotly)
+library(GGally)
+source("cleaner.R")
+```
+
+#### Part 1: Research Question
+###### A1. This project will focus on understanding the odds that a customer will churn based on customer profile comprised of tenure, usage, and survey responses. 
+
+###### A2. Since new customer aquisition is 10 times that of keeping an existing customer, this question is fitting for stakeholders to understand customer life cycles and key metrics for improving customer experience by including customer survey responses and bandwidth consumption. 
+
+###### B1. The assumptions of the logistic regression model are: (1) the response variable is binary, (2) the observations are independent of each other, (3) There is no multicollinearity between explanatory variables, (4) there are no extreme outliers in the data set, (5) there is a linear relationship between the response and explanatory variables, and (6) the sample size is suffiently large (statology). 
+
+###### B2. The benefits for using R is that R is a statistical programming language and inherently has many statistical applications build into it. According to Srinivasan from the Pluralsight video, Understanding and Applying Logistic Regression, R is the best tool to use for regression. (Logistic Regression). 
+
+###### B3. Logistic regression is an appropriate technique for this anaylsis because the response variable is binary, i.e., a customer only has two outcomes in behavior, they either churn, discontinue services or do not churn and retain services. 
+
+##### Part III. Data Preparation
+###### C1.To prepare the data, the cleaning function was used, this eliminates outlier variables and removes all missing values by imputing them with the mean and removing outliers from the data set. The preparation goals are to scale the observations for each variable by using log10 scale. This will help to ensure the outcomes are not being heavily influenced by large quantities. The goal of this manipulation is to improve the understanding of the logistic model. The churn variable was also converted to a numeric variable with outcomes of 0 and 1. 
+
+###### C2. The initial variable selection was based on customer profile attributes that could impact their likelihood of churning and further analyzed to include only variables that could be influenced by stakeholder actions. After the intial model (logit_1) was created, variable importance function in R was used. This function ranks the variables importance to churn and allows for the best variable selection that will help to not over fit the model. The final model will include churn, bandwidth_gb_year, tenure, monthly_charge, techie, item3, item 4, and item5. These variable were ranked highest in the variable importance and they are all statisticall signficant based on the p-value being less than 0.05.
+
+###### C3. Below is the code with annotations showing the data preparation explained in C1 and summary statistic for each variable in the final data set as required for C2. To prepare the data, the names were standardized and have all capital letter changed to lower case and spaces replaced with underscores. Next, the variables have been selected and have had a log base ten plus one applied to adjusted all the numeric values. Finally, the categorical variable churn was encoded with zeros and ones for no, yes outcomes.   
+
+```{r, echo = TRUE, warning=FALSE}
+#Bringing in the data, initial cleaning with cleaning source function
+data <- read.csv("churn_clean.csv", header = TRUE) %>% 
+  janitor::clean_names() %>%                          
+  churn_cleaning() 
+```
+
+```{r, echo=TRUE, warning=FALSE}
+#scaling the data with log 10 + 1, converting churn to numeric binary outcomes of 0's and 1's.
+reduced_scaled <- data %>% 
+                select(churn, marital, outage_sec_perweek, 
+                       yearly_equip_failure, bandwidth_gb_year, 
+                       tenure, monthly_charge, techie, item1:item8) %>% #Select variables for model
+                mutate(across(.col = c(-churn, -marital, -techie), log1p))%>%  #Change to log10+1 scale
+                mutate(churn = as.numeric(ifelse(data$churn == 'Yes',1,0))) #Encode churn as 0's and 1's.
+
+```
+
+```{r}
+#Summary Statistics 
+#glimpse(reduced_scaled)
+#summary(reduced_scaled)
+skimr::skim(reduced_scaled)
+```
+
+###### C3. This code shows the first model (logit_1), its performance and variable importance table results.  
+
+```{r, echo = TRUE, warning=FALSE}
+#Initial model with variable importance to determine which variables need to be included in final data set
+logit_1 <- glm(churn ~ ., data = reduced_scaled, family = "binomial")
+summary(logit_1)
+
+var_imp <- caret::varImp(logit_1, scale = TRUE) 
+var_imp #scale = TRUE complete the normalization step. 
+```
+
+###### C3. This is the final variable selection after reviewing the second model. 
+
+```{r, echo = TRUE, warning=FALSE}
+#Final data set, cleaned and ready for logistic model. The variable were chosen based on their importance, namely, variables with greater than one significance were selected. 
+reduction <- reduced_scaled %>%
+                select(churn, bandwidth_gb_year, tenure, monthly_charge, techie, item3:item5)
+
+```
+
+###### C4. Univariate visualizations with distrubution for all variables in the final data set. 
+
+```{r, echo= TRUE, warning=FALSE}
+#C4- Univariate Visualization, numeric variables
+boxplot(reduction %>% select_if(is.numeric))
+```
+
+```{r, warning=FALSE, echo=TRUE}
+#C4- Univariate Visualization, categorical variables
+ggplot(data = reduction, aes(x = techie, fill = data$churn)) +
+  geom_bar()
+```
+
+```{r, warning=FALSE, message = FALSE}
+#C4- Bivariate plots using ggpairs (R-Bloggers)
+ggpairs(reduction, columns = c("bandwidth_gb_year", "tenure", "monthly_charge", "item3", "item4", "item5", "churn"), title = "Bivariate Plot of Explanatory Variables with Churn indicator", mapping = aes(color = data$churn))
+```
+
+##### Part IV: Model Comparison and Anaylysis 
+
+###### D1. The following shows the next model, which includes the response variable churn, with all explanatory variables kept based on the table of variable importance: bandwidth_gb_year, tenure, monthly_charge, techie, item3, item4, and item5.
+
+```{r, echo = TRUE, warning=FALSE}
+#D1- initial model with all predictors. 
+logit_2 <- glm(churn ~ ., data = reduction, family = "binomial")
+summary(logit_2)
+```
+
+###### D2. Based on this initial model, item3, item4, and item5 are not statistically significant and will therefore be dropped from the next model. 
+
+###### D3. The final model was produced using the follow code. 
+
+```{r, echo = TRUE, warning=FALSE}
+#Reducing the model to include only variables with significant p-values 
+logit_final <- glm(churn ~ bandwidth_gb_year + tenure + monthly_charge + techie, data = reduction, family = "binomial")
+summary(logit_final)
+```
+
+###### E. The analysis began with an inquire on customer churn odds based largely on stakeholders ability to influence customer outcomes; these included tenure, usage, and survey responses. Upon first glance analysis, using the variable importance table, all survey response items except item 3, 4, and 5 were dropped. The first reduced model showed that item 3, 4, and 5 from survey responses were statistically insignificant, having values greater than 0.05, and were thus dropped from the next and final model. The final model included bandwidth_gb_year, tenure, montly_charge and techie. All are statistically significant according to the inital model. To determine the performance of each model the ROC curve and AUC values will used in the performance analysis as seen in the code below. 
+
+
+```{r, echo = TRUE, warning=FALSE}
+#ROC curves and AUC for comparison 
+glm.fit = glm(reduction$churn ~ reduction$monthly_charge, family = binomial)
+par(pty = "s")
+roc(reduction$churn, glm.fit$fitted.values, plot = TRUE, legacy.axes = TRUE, percent = TRUE, 
+    xlab = "False Positive Percent", ylab = "True Positive Percent", print.auc = TRUE)
+plot.roc(reduction$churn, logit_1$fitted.values, percent = TRUE, col = "red", print.auc = TRUE, add = TRUE, print.auc.y = 70)
+plot.roc(reduction$churn, logit_2$fitted.values, percent = TRUE, col = "blue", print.auc = TRUE, add = TRUE, print.auc.y = 85)
+
+```
+###### Using the ROC curve and AUC values shown in the graph, the reduced model performed better than the first initial models since its curve is closer to the line y = x and has a lower AUC values of 73.8%. It was noteworthy that the first two inital models had not change even though they had different explanatory variables.
+
+###### E2. The follow code was used to produce the confusion matrix and its visualization will follow. 
+```{r, echo = TRUE, warning=FALSE}
+#confusion matrix
+pred_data <-  reduction %>%
+  mutate(
+    has_churned = predict(logit_final, reduced_scaled, type = "response")
+  )
+
+actual <- reduced_scaled$churn
+predicted <- round(fitted(logit_final))
+
+outcomes <- table(predicted, actual)
+outcomes
+```
+
+```{r, echo= TRUE, warning=FALSE}
+#Visualizing Confusion Matrix
+confusion <- yardstick::conf_mat(outcomes)
+autoplot(confusion, )
+```
+
+##### Part V. Data Summary and Implications
+###### F1. The regression equation for the final model that includes the response variable, churn, and explanatory variables, bandwidth_gb_year, tenure, monthly_charge, and techie is y =
+```{r, echo= TRUE, warning=FALSE}
+#F1
+log_coeffs <- coef(logit_final)
+coeffs <- exp(coef(logit_final)) +1
+log_coeffs
+coeffs
+reg_eq = 1 + 5.45*data$bandwidth_gb_year + 1.07*data$tenure +193.63*data$monthly_charge +2.71*data$techie
+```
+###### F1. According to the final model, for every 5.45gb of bandwidth increase the odds of a customer churning increase by a factor of 1.49, for every 1.07 months of tenure increase, the odds of a customer churning decrease by a factor of 2.57, for every monthly charge greater than 193.63, the odds of a customer churning increase by a factor of 5.26, for every 3 techies the odds of a customer churning increase by a factor of 0.54. The analysis was limited in several areas, one is that some of the variables, namely tenure with both bandwidth_gb_year and monthly_charge were correlated with each other. However, using a combination of variable elimination from the final model did not provide a better ROC curve or AUC value, so all variables were kept in the final model due to their importance value and p-value. Most importantly, the model was limited in the scope of the question, as the variables chosen were included or excluded based on their potenial for stakeholder influence.  
+
+###### F2. From a statistical sense, the model did not provide much insight into a customer's likelihood of churning since the final model only slightly improved when compared to the initial model. However, from a practical sense, it can be determined that a longer term customer is less likely to discontinue services with their current provider holding all other things constant. Furthermore, prices are the biggest influence on a customers decision to churn. Therefore, prices should be keep below $193.63 for customers and those who exceed this amount should be monitored more closely to educate them on how to best use their additional services. 
+
+##### H. Sources
+###### 1. The 6 Assumptions of Logistic Regression (With Examples). Zach. https://www.statology.org/assumptions-of-logistic-regression/
+
+###### 2. Understanding and Applying Linear Regression. https://app.pluralsight.com/player?course=understanding-applying-linear-regression&author=vitthal-srinivasan&name=understanding-applying-linear-regression-m0&clip=0&mode=live
+
+###### 3. ggpairs in R- A Brief Introduction to ggpairs: R-bloggers. Finnstats. https://www.r-bloggers.com/2021/06/ggpairs-in-r-a-brief-introduction-to-ggpairs/
+
+###### 4. DataCamp. D208. https://app.datacamp.com/learn
+
+
+
+
+

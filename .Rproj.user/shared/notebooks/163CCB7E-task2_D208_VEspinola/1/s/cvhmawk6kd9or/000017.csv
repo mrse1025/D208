@@ -1,0 +1,7 @@
+"0","#Bringing in the data, initial cleaning with cleaning source function"
+"0","data <- read.csv(""churn_clean.csv"", header = TRUE) %>% "
+"0","  janitor::clean_names() %>%                          "
+"0","  churn_cleaning() "
+"2","Error in select(., -population, -job, -customer_id, -interaction, -city,  : 
+  unused arguments (-population, -job, -customer_id, -interaction, -city, -starts_with(""outlier""))
+"

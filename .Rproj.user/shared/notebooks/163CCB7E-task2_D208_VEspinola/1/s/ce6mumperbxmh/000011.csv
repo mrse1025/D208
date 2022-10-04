@@ -1,0 +1,8 @@
+"0","#scaling the data with log 10 + 1, converting churn to numeric binary outcomes of 0's and 1's."
+"0","reduced_scaled <- data %>% "
+"0","                select(churn, marital, outage_sec_perweek, "
+"0","                       yearly_equip_failure, bandwidth_gb_year, "
+"0","                       tenure, monthly_charge, techie, item1:item8) %>% #Select variables for model"
+"0","                mutate(across(.col = c(-churn, -marital, -techie), log1p))%>%  #Change to log10+1 scale"
+"0","                mutate(churn = as.numeric(ifelse(data$churn == 'Yes',1,0))) #Encode churn as 0's and 1's."
+"0",""

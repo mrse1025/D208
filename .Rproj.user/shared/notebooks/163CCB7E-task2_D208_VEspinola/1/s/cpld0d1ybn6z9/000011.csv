@@ -1,0 +1,3 @@
+"0","#Visualizing Confusion Matrix"
+"0","confusion <- yardstick::conf_mat(outcomes)"
+"0","autoplot(confusion, )"

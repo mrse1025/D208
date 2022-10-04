@@ -1,0 +1,5 @@
+"0","#C4- Bivariate plots using ggpairs (R-Bloggers)"
+"0","ggpairs(reduction, columns = c(""bandwidth_gb_year"", ""tenure"", ""monthly_charge"", ""item3"", ""item4"", ""item5"", ""churn""), title = ""Bivariate Plot of Explanatory Variables with Churn indicator"", mapping = aes(color = data$churn))"
+"2","Error in ggpairs(reduction, columns = c(""bandwidth_gb_year"", ""tenure"",  : 
+  object 'reduction' not found
+"

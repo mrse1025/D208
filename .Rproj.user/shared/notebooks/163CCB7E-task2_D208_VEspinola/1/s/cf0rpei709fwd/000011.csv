@@ -1,0 +1,2 @@
+"0","#C4- Univariate Visualization, numeric variables"
+"0","boxplot(reduction %>% select_if(is.numeric))"
