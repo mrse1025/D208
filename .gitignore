@@ -2,4 +2,4 @@
 *.RData
 .RHistory
 *.html
-*.RProj
+.RProj.user/
