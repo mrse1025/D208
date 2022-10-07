@@ -2,6 +2,7 @@ library(tidyverse)
 library(broom)
 library(PerformanceAnalytics)
 library(caret)
+library(MASS)
 library(pROC)
 source("cleaner_copy.R")
 
@@ -13,58 +14,85 @@ data <- read.csv("churn_clean.csv", header = TRUE) %>%
   janitor::clean_names() %>%                          
   churn_cleaning() 
 
-data_selected <- data %>% 
-                select(churn, outage_sec_perweek, port_modem, device_protection, tenure, 
-                       monthly_charge, bandwidth_gb_year)
+data_no_demo <- data %>% mutate(churn = as.numeric(ifelse(data$churn == "Yes", 1, 0))) %>% select(children:item8)
 
-#data reduction based on variables that can be influenced by stakeholders or have a perceived influence 
-#on churn outcome. 
+#Selecting Variables 
 
-reduced_scaled <- data_selected %>% 
-                mutate(across(where(is.numeric) &!c(churn), log1p))%>% 
-                mutate(churn = as.numeric(ifelse(data$churn == 'Yes',1,0)))
+aov <- aov(formula = churn ~ . , data = data_no_demo)
+summary(aov)
 
-write.csv(reduced_scaled, "reduced_scaled_csv")
+#Using the p-value and the potential for influence by stakeholders the following variables from the AOV results
+#have been selected to be used in the model: email, techie, contract, internet_service, phone, multiple, online_backup,
+#online_protection, tech_support, streaming_tv, streaming_movies, payment_method, tenure, monthly_charge
 
-logit_1 <- glm(churn ~ ., data = reduced_scaled, family = "binomial")
+data_selected_scaled <- data_no_demo %>% 
+                select(churn, email, techie, contract, internet_service, phone, multiple, online_backup,
+                       device_protection, tech_support, streaming_tv, streaming_movies, payment_method, 
+                       tenure, monthly_charge)%>%
+                mutate(across(where(is.numeric) &!c(churn), log1p))
 
-summary(logit_1)
+#Summary Statistics 
+skimr::skim(data_selected_scaled)
 
-var_imp <- varImp(logit_1, scale = TRUE) %>% View() #scale = TRUE complete the normalization step. 
+num_var <- data_selected_scaled %>% select_if(is.double)%>% colnames() %>% as.list()
 
-#The next reduction was based on variable importance, any variable with a value greater than one was selected. 
-
-reduction <- reduced_scaled %>%
-                select(churn, bandwidth_gb_year, tenure, monthly_charge, techie, item3:item5)
-                
 #univariate visualizations
-boxplot(reduction %>% select_if(is.numeric))
-        
-factor_viz <- reduction %>% select_if(is.factor)
+for (i in 1:length(num_var)) {
+  g <- ggplot(data = data_selected_scaled, aes(data_var[[i]])) +
+    geom_histogram()+
+    xlab( num_var[[i]])
+  print(g)
+}
 
-ggplot(data = factor_viz, aes(x = techie)) +
-  geom_bar()
+factor_var <- data_selected_scaled %>% select_if(is.factor) %>% colnames() %>% as.list()
 
-logit_2 <- glm(churn ~ ., data = reduction, family = "binomial")
-summary(logit_2)
+for (i in 1:length(factor_var)) {
+  f <- ggplot(data = data_selected_scaled, aes(data_selected_scaled[[i]])) +
+    geom_bar()+
+    xlab( factor_var[[i]])
+  print(f)
+}
 
-logit_final <- glm(churn ~ bandwidth_gb_year + tenure + monthly_charge + techie, data = reduced_scaled, family = "binomial")
-summary(logit_final)
+boxplot(data_selected_scaled %>% select_if(is.numeric))
+
+#Preparing the Data
+
+one_hot_dummy <- dummyVars(" ~.", data = (data_selected_scaled %>% select_if(is.factor))) 
+dummy_df <- data.frame(predict(one_hot_dummy, newdata = (data_selected_scaled %>% select_if(is.factor))))
+
+final_data_set <- dummy_df %>% bind_cols(data_selected_scaled) %>% #put together numeric with dummied variables
+                  select(-(email:payment_method))%>%  #remove all non-dummied variables 
+                  janitor::clean_names()
+
+write.csv(final_data_set, "final_data_set.csv")
+
+logit_1 <- glm(churn ~ ., data = final_data_set, family = "binomial") 
+summary(logit_1)
+coef(logit_1)
+print(logit_1$aic)
+
+step_model <- logit_1 %>% stepAIC (trace = FALSE)
+coef(step_model)
+print(step_model$aic)
 
 
 #ROC and AUC
-plot(x = reduction$monthly_charge, y = reduction$churn)
-glm.fit = glm(reduction$churn ~ reduction$monthly_charge, family = binomial)
-#lines(reduction$monthly_charge, glm.fit$fitted.values)
-par(pty = "s")
-roc(reduction$churn, glm.fit$fitted.values, plot = TRUE, legacy.axes = TRUE, percent = TRUE, 
-    xlab = "False Positive Percent", ylab = "True Positive Percent", print.auc = TRUE)
-plot.roc(reduction$churn, logit_1$fitted.values, percent = TRUE, col = "red", print.auc = TRUE, add = TRUE, print.auc.y = 70)
-plot.roc(reduction$churn, logit_2$fitted.values, percent = TRUE, col = "blue", print.auc = TRUE, add = TRUE, print.auc.y = 85)
+roc(final_data_set$churn, logit_1$fitted.values, plot = TRUE, legacy.axes = TRUE, percent = TRUE, 
+xlab = "False Positive Percent", ylab = "True Positive Percent", print.auc = TRUE,print.auc.y = 95)
+plot.roc(final_data_set$churn, step_model$fitted.values, percent = TRUE, col = "blue", print.auc = TRUE, add = TRUE, print.auc.y = 85)
 
 
 #confusion matrix
-predicted <- as.factor(predict(logit_final, reduction, type = "response"))  #without as.factor, class is numeric
+pred_data <-  data %>%
+  mutate(
+    has_churned = predict(step_model, final_data_set, type = "response")
+  )
 
-#sensitivity <- sensitivity(data$churn, predicted)  input data must have the same two levels???
+actual <- final_data_set$churn
+predicted <- round(fitted(step_model))
 
+outcomes <- table(predicted, actual)
+outcomes
+
+confusion <- yardstick::conf_mat(outcomes)
+autoplot(confusion, )

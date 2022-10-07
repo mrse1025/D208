@@ -83,7 +83,16 @@ plot.roc(final_data_set$churn, step_model$fitted.values, percent = TRUE, col = "
 
 
 #confusion matrix
-predicted <- as.factor(predict(logit_final, reduction, type = "response"))  #without as.factor, class is numeric
+pred_data <-  data %>%
+  mutate(
+    has_churned = predict(step_model, final_data_set, type = "response")
+  )
 
-#sensitivity <- sensitivity(data$churn, predicted)  input data must have the same two levels???
+actual <- final_data_set$churn
+predicted <- round(fitted(step_model))
 
+outcomes <- table(predicted, actual)
+outcomes
+
+confusion <- yardstick::conf_mat(outcomes)
+autoplot(confusion, )

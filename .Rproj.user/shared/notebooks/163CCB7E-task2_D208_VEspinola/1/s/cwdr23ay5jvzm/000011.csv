@@ -1,3 +1,0 @@
-"0","#C4- Univariate Visualization, categorical variables"
-"0","ggplot(data = reduction, aes(x = techie, fill = data$churn)) +"
-"0","  geom_bar()"

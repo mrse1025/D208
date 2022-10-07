@@ -1,5 +1,0 @@
-"0","plot.roc(reduction$churn, logit_1$fitted.values, percent = TRUE, col = ""red"", print.auc = TRUE, add = TRUE, print.auc.y = 70)"
-"2","Setting levels: control = 0, case = 1
-"
-"2","Setting direction: controls < cases
-"

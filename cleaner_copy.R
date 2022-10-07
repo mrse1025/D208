@@ -35,7 +35,7 @@ churn_cleaning <- function(data){
         ~fct_lump(.x,prop = 0.005)
       )
     ) %>%
-    select(everything(),-population, -job,-customer_id,-interaction,-city,-starts_with("outlier"))
+    select(everything(), -starts_with("outlier"), -population, -job,-customer_id,-interaction,-city)
   }
 
 
